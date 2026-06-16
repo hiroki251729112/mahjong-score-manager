@@ -473,7 +473,7 @@ export default function MatchDetailPage() {
                     return (
                       <td
                         key={player.id}
-                        className={`py-4 font-bold ${
+                        className={`align-top font-bold ${
                           score > 0
                             ? "text-green-600"
                             : score < 0
@@ -485,49 +485,53 @@ export default function MatchDetailPage() {
                             : ""
                         }`}
                       >
-                        <div>{formatScore(score)}</div>
-
-                        <div className="mt-2 border-t border-gray-300 pt-2 text-[11px] font-normal leading-relaxed text-gray-500">
-                          <div className="flex justify-center gap-2">
-                            <span>
-                              1位
-                              <span className="font-bold text-rose-400">
-                                {rankCounts[1] ?? 0}
-                              </span>
-                            </span>
-
-                            <span>
-                              2位
-                              <span className="font-bold text-rose-400">
-                                {rankCounts[2] ?? 0}
-                              </span>
-                            </span>
+                        <div className="flex min-h-[168px] flex-col justify-start">
+                          <div className="flex h-[72px] items-center justify-center text-2xl">
+                            {formatScore(score)}
                           </div>
 
-                          <div className="flex justify-center gap-2">
-                            <span>
-                              3位
-                              <span className="font-bold text-rose-400">
-                                {rankCounts[3] ?? 0}
-                              </span>
-                            </span>
-
-                            {players.length >= 4 && (
+                          <div className="border-t border-gray-300 px-1 pt-2 text-[11px] font-normal leading-relaxed text-gray-500">
+                            <div className="flex justify-center gap-2">
                               <span>
-                                4位
+                                1位
                                 <span className="font-bold text-rose-400">
-                                  {rankCounts[4] ?? 0}
+                                  {rankCounts[1] ?? 0}
                                 </span>
                               </span>
-                            )}
+
+                              <span>
+                                2位
+                                <span className="font-bold text-rose-400">
+                                  {rankCounts[2] ?? 0}
+                                </span>
+                              </span>
+                            </div>
+
+                            <div className="flex justify-center gap-2">
+                              <span>
+                                3位
+                                <span className="font-bold text-rose-400">
+                                  {rankCounts[3] ?? 0}
+                                </span>
+                              </span>
+
+                              {players.length >= 4 && (
+                                <span>
+                                  4位
+                                  <span className="font-bold text-rose-400">
+                                    {rankCounts[4] ?? 0}
+                                  </span>
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="mt-1 min-h-[20px] text-xs font-normal text-gray-500">
+                            {chipEnabled && chip !== 0
+                              ? `チップ ${formatScore(chip)}`
+                              : ""}
                           </div>
                         </div>
-
-                        {chipEnabled && chip !== 0 && (
-                          <div className="mt-1 text-xs font-normal text-gray-500">
-                            チップ {formatScore(chip)}
-                          </div>
-                        )}
                       </td>
                     );
                   })}
@@ -535,12 +539,6 @@ export default function MatchDetailPage() {
               </tbody>
             </table>
           </div>
-
-          {hasAnyChip() && (
-            <p className="mt-2 text-xs text-gray-500">
-              ※チップはスコアとは別枠で表示しています
-            </p>
-          )}
         </div>
       </section>
 
