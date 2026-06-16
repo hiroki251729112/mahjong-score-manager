@@ -307,25 +307,40 @@ export default function Home() {
                               >
                                 <div>{formatScore(totalScore)}</div>
 
-                                <div className="mt-1 flex flex-wrap justify-center gap-2 text-[10px] font-normal leading-tight">
-                                  {Array.from({
-                                    length: match.players.length,
-                                  }).map((_, rankIndex) => {
-                                    const rank = rankIndex + 1;
-                                    const count = rankCounts[rank] ?? 0;
+                                <div className="mt-2 border-t border-gray-300 pt-2 text-[11px] font-normal leading-relaxed text-gray-500">
+                                  <div className="flex justify-center gap-2">
+                                    <span>
+                                      1位
+                                      <span className="font-bold text-rose-400">
+                                        {rankCounts[1] ?? 0}
+                                      </span>
+                                    </span>
 
-                                    return (
-                                      <span
-                                        key={rank}
-                                        className="text-gray-500"
-                                      >
-                                        {rank}位
+                                    <span>
+                                      2位
+                                      <span className="font-bold text-rose-400">
+                                        {rankCounts[2] ?? 0}
+                                      </span>
+                                    </span>
+                                  </div>
+
+                                  <div className="flex justify-center gap-2">
+                                    <span>
+                                      3位
+                                      <span className="font-bold text-rose-400">
+                                        {rankCounts[3] ?? 0}
+                                      </span>
+                                    </span>
+
+                                    {match.players.length >= 4 && (
+                                      <span>
+                                        4位
                                         <span className="font-bold text-rose-400">
-                                          {count}
+                                          {rankCounts[4] ?? 0}
                                         </span>
                                       </span>
-                                    );
-                                  })}
+                                    )}
+                                  </div>
                                 </div>
                               </td>
                             );
