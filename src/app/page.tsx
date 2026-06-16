@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 
 type MatchRow = {
@@ -41,6 +42,8 @@ type MatchWithPlayers = MatchRow & {
 };
 
 export default function Home() {
+  const router = useRouter();
+
   const [matches, setMatches] = useState<MatchWithPlayers[]>([]);
   const [gameRows, setGameRows] = useState<GameRow[]>([]);
   const [gameResultRows, setGameResultRows] = useState<GameResultRow[]>([]);
@@ -91,8 +94,29 @@ export default function Home() {
     return counts;
   };
 
+  const logout = async () => {
+    const { error } = await supabase.auth.signOut();
+
+    if (error) {
+      alert("ログアウトに失敗しました");
+      console.error(error);
+      return;
+    }
+
+    router.push("/login");
+  };
+
   useEffect(() => {
     const fetchMatches = async () => {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!session) {
+        router.push("/login");
+        return;
+      }
+
       const { data: matchData, error: matchError } = await supabase
         .from("matches")
         .select("*")
@@ -191,7 +215,7 @@ export default function Home() {
     };
 
     fetchMatches();
-  }, []);
+  }, [router]);
 
   return (
     <main className="min-h-screen bg-gray-100 p-4">
@@ -209,7 +233,10 @@ export default function Home() {
               メンバー管理
             </Link>
 
-            <button className="w-full p-3 text-left hover:bg-gray-100">
+            <button
+              onClick={logout}
+              className="w-full p-3 text-left hover:bg-gray-100"
+            >
               ログアウト
             </button>
           </div>
@@ -268,9 +295,7 @@ export default function Home() {
                                   className="h-3 w-3 rounded-full border border-gray-300"
                                   style={{ backgroundColor: player.color }}
                                 />
-                                <span className="truncate">
-                                  {player.name}
-                                </span>
+                                <span className="truncate">{player.name}</span>
                               </div>
                             </th>
                           ))}
