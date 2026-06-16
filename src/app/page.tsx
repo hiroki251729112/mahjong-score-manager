@@ -10,12 +10,14 @@ type MatchRow = {
   name: string;
   match_date: string;
   player_count: number;
+  user_id: string | null;
 };
 
 type Member = {
   id: number;
   name: string;
   color: string;
+  user_id: string | null;
 };
 
 type MatchPlayerRow = {
@@ -109,10 +111,11 @@ export default function Home() {
   useEffect(() => {
     const fetchMatches = async () => {
       const {
-        data: { session },
-      } = await supabase.auth.getSession();
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser();
 
-      if (!session) {
+      if (userError || !user) {
         router.push("/login");
         return;
       }
@@ -120,6 +123,7 @@ export default function Home() {
       const { data: matchData, error: matchError } = await supabase
         .from("matches")
         .select("*")
+        .eq("user_id", user.id)
         .order("match_date", { ascending: false })
         .order("id", { ascending: false });
 
@@ -130,21 +134,13 @@ export default function Home() {
         return;
       }
 
-      const { data: playerData, error: playerError } = await supabase
-        .from("match_players")
-        .select("*")
-        .order("seat_order", { ascending: true });
-
-      if (playerError) {
-        alert("参加メンバーの取得に失敗しました");
-        console.error(playerError);
-        setLoading(false);
-        return;
-      }
+      const matchRows = (matchData ?? []) as MatchRow[];
+      const matchIds = matchRows.map((match) => match.id);
 
       const { data: memberData, error: memberError } = await supabase
         .from("members")
-        .select("*");
+        .select("*")
+        .eq("user_id", user.id);
 
       if (memberError) {
         alert("メンバー情報の取得に失敗しました");
@@ -153,41 +149,60 @@ export default function Home() {
         return;
       }
 
-      const { data: gameData, error: gameError } = await supabase
-        .from("games")
-        .select("id, match_id");
+      const memberRows = (memberData ?? []) as Member[];
 
-      if (gameError) {
-        alert("対局情報の取得に失敗しました");
-        console.error(gameError);
-        setLoading(false);
-        return;
-      }
-
-      const gameIds = ((gameData ?? []) as GameRow[]).map((game) => game.id);
-
+      let playerRows: MatchPlayerRow[] = [];
+      let games: GameRow[] = [];
       let resultRows: GameResultRow[] = [];
 
-      if (gameIds.length > 0) {
-        const { data: resultData, error: resultError } = await supabase
-          .from("game_results")
-          .select("game_id, member_id, rank, final_score")
-          .in("game_id", gameIds);
+      if (matchIds.length > 0) {
+        const { data: playerData, error: playerError } = await supabase
+          .from("match_players")
+          .select("*")
+          .in("match_id", matchIds)
+          .order("seat_order", { ascending: true });
 
-        if (resultError) {
-          alert("対局結果の取得に失敗しました");
-          console.error(resultError);
+        if (playerError) {
+          alert("参加メンバーの取得に失敗しました");
+          console.error(playerError);
           setLoading(false);
           return;
         }
 
-        resultRows = (resultData ?? []) as GameResultRow[];
-      }
+        playerRows = (playerData ?? []) as MatchPlayerRow[];
 
-      const matchRows = (matchData ?? []) as MatchRow[];
-      const playerRows = (playerData ?? []) as MatchPlayerRow[];
-      const memberRows = (memberData ?? []) as Member[];
-      const games = (gameData ?? []) as GameRow[];
+        const { data: gameData, error: gameError } = await supabase
+          .from("games")
+          .select("id, match_id")
+          .in("match_id", matchIds);
+
+        if (gameError) {
+          alert("対局情報の取得に失敗しました");
+          console.error(gameError);
+          setLoading(false);
+          return;
+        }
+
+        games = (gameData ?? []) as GameRow[];
+
+        const gameIds = games.map((game) => game.id);
+
+        if (gameIds.length > 0) {
+          const { data: resultData, error: resultError } = await supabase
+            .from("game_results")
+            .select("game_id, member_id, rank, final_score")
+            .in("game_id", gameIds);
+
+          if (resultError) {
+            alert("対局結果の取得に失敗しました");
+            console.error(resultError);
+            setLoading(false);
+            return;
+          }
+
+          resultRows = (resultData ?? []) as GameResultRow[];
+        }
+      }
 
       const matchesWithPlayers = matchRows.map((match) => {
         const players = playerRows

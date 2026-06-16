@@ -9,6 +9,7 @@ type Member = {
   id: number;
   name: string;
   color: string;
+  user_id: string | null;
 };
 
 type TileOptionProps = {
@@ -54,21 +55,51 @@ function Section({ title, value, children }: SectionProps) {
 }
 
 const colorPalette = [
-  "#6d28d9", "#8b5cf6", "#c4b5fd",
-  "#1d4ed8", "#3b82f6", "#93c5fd",
-  "#0284c7", "#38bdf8", "#bae6fd",
-  "#0891b2", "#22d3ee", "#a5f3fc",
-  "#059669", "#34d399", "#a7f3d0",
-  "#16a34a", "#4ade80", "#bbf7d0",
-  "#65a30d", "#a3e635", "#d9f99d",
-  "#ca8a04", "#facc15", "#fef08a",
-  "#ea580c", "#fb923c", "#fed7aa",
-  "#dc2626", "#f87171", "#fecaca",
-  "#db2777", "#f472b6", "#fbcfe8",
-  "#c026d3", "#e879f9", "#f5d0fe",
-  "#92400e", "#b45309", "#d6b38a",
-  "#374151", "#6b7280", "#cbd5e1",
-  "#0f172a", "#334155", "#94a3b8",
+  "#6d28d9",
+  "#8b5cf6",
+  "#c4b5fd",
+  "#1d4ed8",
+  "#3b82f6",
+  "#93c5fd",
+  "#0284c7",
+  "#38bdf8",
+  "#bae6fd",
+  "#0891b2",
+  "#22d3ee",
+  "#a5f3fc",
+  "#059669",
+  "#34d399",
+  "#a7f3d0",
+  "#16a34a",
+  "#4ade80",
+  "#bbf7d0",
+  "#65a30d",
+  "#a3e635",
+  "#d9f99d",
+  "#ca8a04",
+  "#facc15",
+  "#fef08a",
+  "#ea580c",
+  "#fb923c",
+  "#fed7aa",
+  "#dc2626",
+  "#f87171",
+  "#fecaca",
+  "#db2777",
+  "#f472b6",
+  "#fbcfe8",
+  "#c026d3",
+  "#e879f9",
+  "#f5d0fe",
+  "#92400e",
+  "#b45309",
+  "#d6b38a",
+  "#374151",
+  "#6b7280",
+  "#cbd5e1",
+  "#0f172a",
+  "#334155",
+  "#94a3b8",
   "#000000",
 ];
 
@@ -135,7 +166,9 @@ export default function CreateMatchPage() {
   const [feePaids, setFeePaids] = useState<Record<string, string>>({});
 
   const [showAddMemberModal, setShowAddMemberModal] = useState(false);
-  const [addMemberTargetIndex, setAddMemberTargetIndex] = useState<number | null>(null);
+  const [addMemberTargetIndex, setAddMemberTargetIndex] = useState<
+    number | null
+  >(null);
   const [newMemberName, setNewMemberName] = useState("");
   const [newMemberColor, setNewMemberColor] = useState(colorPalette[0]);
 
@@ -191,9 +224,20 @@ export default function CreateMatchPage() {
   };
 
   const fetchMembers = async () => {
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser();
+
+    if (userError || !user) {
+      router.push("/login");
+      return;
+    }
+
     const { data, error } = await supabase
       .from("members")
       .select("*")
+      .eq("user_id", user.id)
       .order("name", { ascending: true });
 
     if (error) {
@@ -285,11 +329,23 @@ export default function CreateMatchPage() {
       return;
     }
 
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser();
+
+    if (userError || !user) {
+      alert("ログイン情報の取得に失敗しました");
+      router.push("/login");
+      return;
+    }
+
     const { data, error } = await supabase
       .from("members")
       .insert({
         name,
         color: newMemberColor,
+        user_id: user.id,
       })
       .select()
       .single();
@@ -408,6 +464,18 @@ export default function CreateMatchPage() {
 
     setSaving(true);
 
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser();
+
+    if (userError || !user) {
+      alert("ログイン情報の取得に失敗しました");
+      setSaving(false);
+      router.push("/login");
+      return;
+    }
+
     const { data: matchData, error: matchError } = await supabase
       .from("matches")
       .insert({
@@ -422,6 +490,7 @@ export default function CreateMatchPage() {
         bankruptcy,
         fee,
         tip: tipValue,
+        user_id: user.id,
       })
       .select()
       .single();

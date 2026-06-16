@@ -2,12 +2,14 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 
 type Member = {
   id: number;
   name: string;
   color: string;
+  user_id: string | null;
 };
 
 const colorPalette = [
@@ -30,6 +32,8 @@ const colorPalette = [
 ];
 
 export default function MembersPage() {
+  const router = useRouter();
+
   const [members, setMembers] = useState<Member[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -41,10 +45,32 @@ export default function MembersPage() {
   const [editName, setEditName] = useState("");
   const [editColor, setEditColor] = useState(colorPalette[0]);
 
+  const fetchLoginUser = async () => {
+    const {
+      data: { user },
+      error,
+    } = await supabase.auth.getUser();
+
+    if (error || !user) {
+      router.push("/login");
+      return null;
+    }
+
+    return user;
+  };
+
   const fetchMembers = async () => {
+    const user = await fetchLoginUser();
+
+    if (!user) {
+      setLoading(false);
+      return;
+    }
+
     const { data, error } = await supabase
       .from("members")
       .select("*")
+      .eq("user_id", user.id)
       .order("name", { ascending: true });
 
     if (error) {
@@ -64,9 +90,7 @@ export default function MembersPage() {
 
   const isDuplicateName = (name: string, ignoreId?: number) => {
     return members.some(
-      (member) =>
-        member.name === name.trim() &&
-        member.id !== ignoreId
+      (member) => member.name === name.trim() && member.id !== ignoreId
     );
   };
 
@@ -83,9 +107,14 @@ export default function MembersPage() {
       return;
     }
 
+    const user = await fetchLoginUser();
+
+    if (!user) return;
+
     const { error } = await supabase.from("members").insert({
       name,
       color: newColor,
+      user_id: user.id,
     });
 
     if (error) {
@@ -122,13 +151,18 @@ export default function MembersPage() {
       return;
     }
 
+    const user = await fetchLoginUser();
+
+    if (!user) return;
+
     const { error } = await supabase
       .from("members")
       .update({
         name,
         color: editColor,
       })
-      .eq("id", editingMember.id);
+      .eq("id", editingMember.id)
+      .eq("user_id", user.id);
 
     if (error) {
       alert("メンバーの更新に失敗しました");
@@ -141,16 +175,19 @@ export default function MembersPage() {
   };
 
   const deleteMember = async (member: Member) => {
-    const result = window.confirm(
-      `${member.name} を削除しますか？`
-    );
+    const result = window.confirm(`${member.name} を削除しますか？`);
 
     if (!result) return;
+
+    const user = await fetchLoginUser();
+
+    if (!user) return;
 
     const { error } = await supabase
       .from("members")
       .delete()
-      .eq("id", member.id);
+      .eq("id", member.id)
+      .eq("user_id", user.id);
 
     if (error) {
       alert("メンバーの削除に失敗しました");
@@ -183,9 +220,7 @@ export default function MembersPage() {
             style={{ backgroundColor: color }}
           >
             {selectedColor === color && (
-              <span className="text-xl font-bold text-white">
-                ✓
-              </span>
+              <span className="text-xl font-bold text-white">✓</span>
             )}
           </button>
         ))}
@@ -278,10 +313,7 @@ export default function MembersPage() {
                 選択した色は対局結果やランキングで使用されます
               </p>
 
-              <ColorPalette
-                selectedColor={newColor}
-                onSelect={setNewColor}
-              />
+              <ColorPalette selectedColor={newColor} onSelect={setNewColor} />
             </div>
 
             <button
@@ -313,10 +345,7 @@ export default function MembersPage() {
             <div>
               <label className="mb-2 block font-bold">色</label>
 
-              <ColorPalette
-                selectedColor={editColor}
-                onSelect={setEditColor}
-              />
+              <ColorPalette selectedColor={editColor} onSelect={setEditColor} />
             </div>
 
             <div className="grid grid-cols-2 gap-3">
