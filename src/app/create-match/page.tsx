@@ -129,7 +129,6 @@ export default function CreateMatchPage() {
   const [loadingMembers, setLoadingMembers] = useState(true);
   const [saving, setSaving] = useState(false);
 
-  const [matchName, setMatchName] = useState("");
   const [matchDate, setMatchDate] = useState("");
 
   const [matchType, setMatchType] = useState("4人麻雀");
@@ -377,10 +376,6 @@ export default function CreateMatchPage() {
   const validateAndSave = async () => {
     if (saving) return;
 
-    if (matchName.trim() === "") {
-      alert("対戦名を入力してください");
-      return;
-    }
 
     if (matchDate === "") {
       alert("日付を選択してください");
@@ -479,7 +474,7 @@ export default function CreateMatchPage() {
     const { data: matchData, error: matchError } = await supabase
       .from("matches")
       .insert({
-        name: matchName.trim(),
+        name: matchDate,
         match_date: matchDate,
         player_count: playerCount,
         start_point: startPointValue,
@@ -555,15 +550,6 @@ export default function CreateMatchPage() {
       <div className="space-y-5">
         <section className="rounded-xl bg-white p-4 shadow">
           <div className="space-y-4">
-            <div>
-              <label className="mb-1 block font-bold">対戦名</label>
-              <input
-                value={matchName}
-                onChange={(e) => setMatchName(e.target.value)}
-                className="w-full rounded-lg border p-3"
-                placeholder="大学麻雀"
-              />
-            </div>
 
             <div>
               <label className="mb-1 block font-bold">日付</label>
