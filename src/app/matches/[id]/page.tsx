@@ -298,6 +298,7 @@ export default function MatchDetailPage() {
   const showScoreMoney = rateValue > 0;
   const showChipMoney = hasAnyChip() && tipValue > 0;
   const showFeeMoney = hasAnyFee();
+  const showChipRow = hasAnyChip();
 
   const paymentSummaries: PaymentSummary[] = players.map((player) => {
     const fee = getFee(player.id);
@@ -485,8 +486,8 @@ export default function MatchDetailPage() {
                             : ""
                         }`}
                       >
-                        <div className="flex min-h-[168px] flex-col justify-start">
-                          <div className="flex h-[72px] items-center justify-center text-2xl">
+                        <div className="flex flex-col">
+                          <div className="py-6 text-center text-2xl">
                             {formatScore(score)}
                           </div>
 
@@ -526,11 +527,11 @@ export default function MatchDetailPage() {
                             </div>
                           </div>
 
-                          <div className="mt-1 min-h-[20px] text-xs font-normal text-gray-500">
-                            {chipEnabled && chip !== 0
-                              ? `チップ ${formatScore(chip)}`
-                              : ""}
-                          </div>
+                          {showChipRow && (
+                            <div className="mt-1 pb-2 text-xs font-normal text-gray-500">
+                              チップ {chip !== 0 ? formatScore(chip) : "0"}
+                            </div>
+                          )}
                         </div>
                       </td>
                     );
