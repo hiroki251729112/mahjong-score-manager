@@ -53,8 +53,24 @@ type MatchFee = {
   fee_paid: number;
 };
 
+type MatchExpense = {
+  id: number;
+  match_id: number;
+  member_id: number;
+  expense_name: string;
+  expense_share: number;
+  expense_paid: number;
+};
+
 type GameWithResults = Game & {
   results: GameResult[];
+};
+
+type ExpenseSummaryItem = {
+  name: string;
+  share: number;
+  paid: number;
+  money: number;
 };
 
 type PaymentSummary = {
@@ -66,6 +82,8 @@ type PaymentSummary = {
   feeShare: number;
   feePaid: number;
   feeMoney: number;
+  expenses: ExpenseSummaryItem[];
+  expenseMoney: number;
   totalMoney: number;
 };
 
@@ -75,6 +93,17 @@ type Settlement = {
   amount: number;
 };
 
+function splitEvenly(total: number, count: number) {
+  if (count <= 0) return [];
+
+  const base = Math.floor(total / count);
+  const remainder = total % count;
+
+  return Array.from({ length: count }, (_, index) =>
+    index < remainder ? base + 1 : base
+  );
+}
+
 export default function MatchDetailPage() {
   const params = useParams();
   const matchId = Number(params.id);
@@ -83,7 +112,17 @@ export default function MatchDetailPage() {
   const [players, setPlayers] = useState<Member[]>([]);
   const [games, setGames] = useState<GameWithResults[]>([]);
   const [matchFees, setMatchFees] = useState<MatchFee[]>([]);
+  const [matchExpenses, setMatchExpenses] = useState<MatchExpense[]>([]);
   const [loading, setLoading] = useState(true);
+
+  const [showExpenseForm, setShowExpenseForm] = useState(false);
+  const [savingExpense, setSavingExpense] = useState(false);
+  const [expenseName, setExpenseName] = useState("延長料金");
+  const [expenseTotal, setExpenseTotal] = useState("");
+  const [expenseShares, setExpenseShares] = useState<Record<string, string>>(
+    {}
+  );
+  const [expensePaids, setExpensePaids] = useState<Record<string, string>>({});
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
@@ -191,6 +230,19 @@ export default function MatchDetailPage() {
       return;
     }
 
+    const { data: expenseData, error: expenseError } = await supabase
+      .from("match_expenses")
+      .select("*")
+      .eq("match_id", matchId)
+      .order("id", { ascending: true });
+
+    if (expenseError) {
+      alert("追加支出の取得に失敗しました");
+      console.error(expenseError);
+      setLoading(false);
+      return;
+    }
+
     const gamesWithResults = ((gameData ?? []) as Game[]).map((game) => ({
       ...game,
       results: resultData.filter((result) => result.game_id === game.id),
@@ -200,6 +252,7 @@ export default function MatchDetailPage() {
     setPlayers(sortedPlayers);
     setGames(gamesWithResults);
     setMatchFees((feeData ?? []) as MatchFee[]);
+    setMatchExpenses((expenseData ?? []) as MatchExpense[]);
     setLoading(false);
   };
 
@@ -261,6 +314,17 @@ export default function MatchDetailPage() {
     return matchFees.find((item) => item.member_id === memberId);
   };
 
+  const getExpenses = (memberId: number) => {
+    return matchExpenses
+      .filter((expense) => expense.member_id === memberId)
+      .map((expense) => ({
+        name: expense.expense_name,
+        share: expense.expense_share,
+        paid: expense.expense_paid,
+        money: expense.expense_paid - expense.expense_share,
+      }));
+  };
+
   const chipEnabled = match?.tip !== "なし";
 
   const hasAnyChip = () => {
@@ -298,10 +362,111 @@ export default function MatchDetailPage() {
   const showScoreMoney = rateValue > 0;
   const showChipMoney = hasAnyChip() && tipValue > 0;
   const showFeeMoney = hasAnyFee();
+  const showExpenseMoney = matchExpenses.length > 0;
   const showChipRow = hasAnyChip();
 
+  const expenseTotalNumber =
+    expenseTotal !== "" && /^\d+$/.test(expenseTotal)
+      ? Number(expenseTotal)
+      : 0;
+
+  const expenseShareTotal = players.reduce((total, player) => {
+    const value = expenseShares[String(player.id)];
+    return total + (value && /^\d+$/.test(value) ? Number(value) : 0);
+  }, 0);
+
+  const expensePaidTotal = players.reduce((total, player) => {
+    const value = expensePaids[String(player.id)];
+    return total + (value && /^\d+$/.test(value) ? Number(value) : 0);
+  }, 0);
+
+  const isExpenseShareCorrect =
+    expenseTotal === "" || expenseShareTotal === expenseTotalNumber;
+
+  const isExpensePaidCorrect =
+    expenseTotal === "" || expensePaidTotal === expenseTotalNumber;
+
+  const applyEvenExpenseShare = () => {
+    if (expenseTotal === "" || !/^\d+$/.test(expenseTotal)) return;
+
+    const values = splitEvenly(Number(expenseTotal), players.length);
+    const nextShares: Record<string, string> = {};
+
+    players.forEach((player, index) => {
+      nextShares[String(player.id)] = String(values[index] ?? 0);
+    });
+
+    setExpenseShares(nextShares);
+  };
+
+  const saveExpense = async () => {
+    if (savingExpense) return;
+
+    const name = expenseName.trim();
+
+    if (name === "") {
+      alert("支出名を入力してください");
+      return;
+    }
+
+    if (expenseTotal === "" || !/^\d+$/.test(expenseTotal)) {
+      alert("支出の合計金額を整数で入力してください");
+      return;
+    }
+
+    const duplicateExpense = matchExpenses.some(
+      (expense) => expense.expense_name === name
+    );
+
+    if (duplicateExpense) {
+      alert("同じ名前の支出が既にあります");
+      return;
+    }
+
+    if (!isExpenseShareCorrect) {
+      alert("負担額の合計が支出の合計金額と一致していません");
+      return;
+    }
+
+    if (!isExpensePaidCorrect) {
+      alert("支払額の合計が支出の合計金額と一致していません");
+      return;
+    }
+
+    setSavingExpense(true);
+
+    const expenseRows = players.map((player) => ({
+      match_id: matchId,
+      member_id: player.id,
+      expense_name: name,
+      expense_share: Number(expenseShares[String(player.id)] ?? 0),
+      expense_paid: Number(expensePaids[String(player.id)] ?? 0),
+    }));
+
+    const { error } = await supabase
+      .from("match_expenses")
+      .insert(expenseRows);
+
+    if (error) {
+      alert("支出の保存に失敗しました");
+      console.error(error);
+      setSavingExpense(false);
+      return;
+    }
+
+    setExpenseName("延長料金");
+    setExpenseTotal("");
+    setExpenseShares({});
+    setExpensePaids({});
+    setShowExpenseForm(false);
+    setSavingExpense(false);
+
+    fetchMatchDetail();
+  };
+  
   const paymentSummaries: PaymentSummary[] = players.map((player) => {
     const fee = getFee(player.id);
+    const expenses = getExpenses(player.id);
 
     const totalScore = getTotalScore(player.id);
     const totalChip = getTotalChip(player.id);
@@ -313,6 +478,11 @@ export default function MatchDetailPage() {
     const feePaid = fee?.fee_paid ?? 0;
     const feeMoney = showFeeMoney ? feePaid - feeShare : 0;
 
+    const expenseMoney = expenses.reduce(
+      (total, expense) => total + expense.money,
+      0
+    );
+
     return {
       memberId: player.id,
       totalScore,
@@ -322,7 +492,9 @@ export default function MatchDetailPage() {
       feeShare,
       feePaid,
       feeMoney,
-      totalMoney: scoreMoney + chipMoney + feeMoney,
+      expenses,
+      expenseMoney,
+      totalMoney: scoreMoney + chipMoney + feeMoney + expenseMoney,
     };
   });
 
@@ -407,7 +579,6 @@ export default function MatchDetailPage() {
       </main>
     );
   }
-
   if (!match) {
     return (
       <main className="min-h-screen bg-gray-100 p-4">
@@ -671,9 +842,20 @@ export default function MatchDetailPage() {
       )}
 
       <section className="mt-5 rounded-xl bg-white p-4 shadow">
-        <h2 className="mb-3 text-lg font-bold">支出計算</h2>
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="text-lg font-bold">支出計算</h2>
 
-        {!showScoreMoney && !showChipMoney && !showFeeMoney ? (
+          <Link href={`/matches/${matchId}/expenses`}>
+            <button className="rounded-lg bg-purple-700 px-3 py-2 text-sm font-bold text-white">
+              編集
+            </button>
+          </Link>
+        </div>
+
+        {!showScoreMoney &&
+        !showChipMoney &&
+        !showFeeMoney &&
+        !showExpenseMoney ? (
           <p className="rounded-lg bg-gray-100 p-3 text-sm text-gray-500">
             支出計算に使う設定がありません
           </p>
@@ -711,6 +893,14 @@ export default function MatchDetailPage() {
                     </div>
                   )}
 
+                  {summary.expenses.map((expense, index) => (
+                    <div key={`${summary.memberId}-${expense.name}-${index}`}>
+                      {expense.name}：{expense.paid.toLocaleString()}円 -{" "}
+                      {expense.share.toLocaleString()}円 ={" "}
+                      {formatYen(expense.money)}
+                    </div>
+                  ))}
+
                   <div
                     className={`pt-1 font-bold ${
                       summary.totalMoney > 0
@@ -725,6 +915,148 @@ export default function MatchDetailPage() {
                 </div>
               </div>
             ))}
+          </div>
+        )}
+
+        <button
+          onClick={() => setShowExpenseForm(!showExpenseForm)}
+          className="mt-5 w-full rounded-xl bg-purple-700 py-3 font-bold text-white shadow-md"
+        >
+          {showExpenseForm ? "支出追加を閉じる" : "＋ 支出を追加"}
+        </button>
+
+        {showExpenseForm && (
+          <div className="mt-4 rounded-xl border border-purple-200 bg-purple-50 p-4">
+            <h3 className="mb-4 text-lg font-bold text-purple-800">
+              支出を追加
+            </h3>
+
+            <div className="space-y-4">
+              <div>
+                <label className="mb-1 block font-bold">支出名</label>
+                <input
+                  value={expenseName}
+                  onChange={(e) => setExpenseName(e.target.value)}
+                  className="w-full rounded-lg border p-3"
+                  placeholder="延長料金"
+                />
+              </div>
+
+              <div>
+                <label className="mb-1 block font-bold">合計金額</label>
+                <input
+                  value={expenseTotal}
+                  onChange={(e) => setExpenseTotal(e.target.value)}
+                  className="w-full rounded-lg border p-3"
+                  placeholder="2000"
+                  inputMode="numeric"
+                />
+              </div>
+
+              <button
+                type="button"
+                onClick={applyEvenExpenseShare}
+                className="w-full rounded-lg border-2 border-purple-700 bg-white py-2 font-bold text-purple-700"
+              >
+                合計金額を均等に割る
+              </button>
+
+              <div>
+                <h4 className="mb-2 font-bold text-purple-800">
+                  各メンバーの負担額
+                </h4>
+
+                <div className="space-y-3">
+                  {players.map((player) => (
+                    <div key={player.id}>
+                      <label className="mb-1 flex items-center gap-2 font-bold">
+                        <span
+                          className="h-4 w-4 rounded-full border border-gray-300"
+                          style={{ backgroundColor: player.color }}
+                        />
+                        {player.name}
+                      </label>
+
+                      <input
+                        value={expenseShares[String(player.id)] ?? ""}
+                        onChange={(e) =>
+                          setExpenseShares({
+                            ...expenseShares,
+                            [String(player.id)]: e.target.value,
+                          })
+                        }
+                        className="w-full rounded-lg border p-3"
+                        placeholder="負担額"
+                        inputMode="numeric"
+                      />
+                    </div>
+                  ))}
+                </div>
+
+                <div
+                  className={`mt-3 rounded-lg p-3 text-center font-bold ${
+                    isExpenseShareCorrect
+                      ? "bg-green-100 text-green-700"
+                      : "bg-red-100 text-red-700"
+                  }`}
+                >
+                  負担額合計：{expenseShareTotal} / {expenseTotalNumber}
+                </div>
+              </div>
+
+              <div>
+                <h4 className="mb-2 font-bold text-purple-800">
+                  実際に払った金額
+                </h4>
+
+                <div className="space-y-3">
+                  {players.map((player) => (
+                    <div key={player.id}>
+                      <label className="mb-1 flex items-center gap-2 font-bold">
+                        <span
+                          className="h-4 w-4 rounded-full border border-gray-300"
+                          style={{ backgroundColor: player.color }}
+                        />
+                        {player.name}
+                      </label>
+
+                      <input
+                        value={expensePaids[String(player.id)] ?? ""}
+                        onChange={(e) =>
+                          setExpensePaids({
+                            ...expensePaids,
+                            [String(player.id)]: e.target.value,
+                          })
+                        }
+                        className="w-full rounded-lg border p-3"
+                        placeholder="支払額"
+                        inputMode="numeric"
+                      />
+                    </div>
+                  ))}
+                </div>
+
+                <div
+                  className={`mt-3 rounded-lg p-3 text-center font-bold ${
+                    isExpensePaidCorrect
+                      ? "bg-green-100 text-green-700"
+                      : "bg-red-100 text-red-700"
+                  }`}
+                >
+                  支払額合計：{expensePaidTotal} / {expenseTotalNumber}
+                </div>
+              </div>
+
+              <button
+                onClick={saveExpense}
+                disabled={savingExpense}
+                className={`w-full rounded-xl py-3 font-bold text-white ${
+                  savingExpense ? "bg-gray-400" : "bg-purple-700"
+                }`}
+              >
+                {savingExpense ? "保存中..." : "支出を保存"}
+              </button>
+            </div>
           </div>
         )}
 
