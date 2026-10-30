@@ -369,6 +369,20 @@ export default function AddGamePage() {
                     placeholder="381"
                     inputMode="numeric"
                   />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const current = scores[player.id] ?? "";
+                      const next = current.startsWith("-")
+                        ? current.slice(1)
+                        : `-${current}`;
+                      setScores((previous) => ({ ...previous, [player.id]: next }));
+                    }}
+                    className="shrink-0 rounded-lg border border-purple-300 bg-purple-50 px-3 py-3 font-bold text-purple-700 active:bg-purple-200"
+                    aria-label={`${player.name}の点数のプラス・マイナスを切り替え`}
+                  >
+                    ±
+                  </button>
                   <span className="whitespace-nowrap font-bold text-gray-600">
                     ×100点
                   </span>

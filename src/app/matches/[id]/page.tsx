@@ -316,7 +316,11 @@ export default function MatchDetailPage() {
 
   const getExpenses = (memberId: number) => {
     return matchExpenses
-      .filter((expense) => expense.member_id === memberId)
+      .filter(
+        (expense) =>
+          expense.member_id === memberId &&
+          (expense.expense_share !== 0 || expense.expense_paid !== 0)
+      )
       .map((expense) => ({
         name: expense.expense_name,
         share: expense.expense_share,
