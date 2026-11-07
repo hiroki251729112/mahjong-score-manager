@@ -248,6 +248,13 @@ export default function Home() {
               メンバー管理
             </Link>
 
+            <Link
+              href="/stats"
+              className="block border-b p-3 hover:bg-gray-100"
+            >
+              成績詳細
+            </Link>
+
             <button
               onClick={logout}
               className="w-full p-3 text-left hover:bg-gray-100"
@@ -305,12 +312,16 @@ export default function Home() {
                                   : ""
                               }`}
                             >
-                              <div className="flex items-center justify-center gap-1">
+                              <div className="flex min-w-0 items-center justify-center px-0.5">
                                 <span
-                                  className="h-3 w-3 rounded-full border border-gray-300"
-                                  style={{ backgroundColor: player.color }}
-                                />
-                                <span className="truncate">{player.name}</span>
+                                  className="block w-full whitespace-nowrap text-center leading-tight"
+                                  style={{
+                                    fontSize: `clamp(8px, ${Math.min(16, Math.max(8, 64 / Math.max(player.name.length, 1)))}px, 16px)`,
+                                  }}
+                                  title={player.name}
+                                >
+                                  {player.name}
+                                </span>
                               </div>
                             </th>
                           ))}
