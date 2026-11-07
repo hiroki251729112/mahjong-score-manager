@@ -1,5 +1,7 @@
 "use client";
 
+import AutoFitName from "@/components/AutoFitName";
+
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
@@ -416,13 +418,7 @@ export default function AddGamePage() {
                               : ""
                           }`}
                         >
-                          <div className="flex items-center justify-center gap-1">
-                            <span
-                              className="h-3 w-3 rounded-full border border-gray-300"
-                              style={{ backgroundColor: player.color }}
-                            />
-                            <span className="truncate">{player.name}</span>
-                          </div>
+                          <AutoFitName name={player.name} />
                         </th>
                       ))}
                     </tr>
