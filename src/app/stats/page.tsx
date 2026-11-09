@@ -8,8 +8,8 @@ import { supabase } from "@/lib/supabase";
 type Member = { id: number; name: string };
 type Match = { id: number; match_date: string; rate: string | null; tip: string | null };
 type Game = { id: number; match_id: number; game_number: number };
-type Result = { game_id: number; member_id: number; rank: number; final_score: number; chip: number | null };
-type Entry = { memberId: number; matchId: number; gameId: number; date: string; gameNumber: number; rank: number; score: number; scoreMoney: number; chipMoney: number };
+type Result = { game_id: number; member_id: number; rank: number; final_score: number; raw_score: number | null; chip: number | null };
+type Entry = { memberId: number; matchId: number; gameId: number; date: string; gameNumber: number; rank: number; score: number; rawScore: number | null; scoreMoney: number; chipMoney: number };
 type Tab = "ranking" | "member" | "trend";
 type Period = "all" | "year" | "30days";
 type Unit = "game" | "match";
@@ -90,7 +90,7 @@ export default function StatsPage() {
       if (gamesRes.error) { if (active) { setError("半荘データを取得できませんでした"); setLoading(false); } return; }
       const games = (gamesRes.data ?? []) as Game[];
       if (!games.length) { if (active) setLoading(false); return; }
-      const resultsRes = await supabase.from("game_results").select("game_id,member_id,rank,final_score,chip").in("game_id", games.map(g => g.id));
+      const resultsRes = await supabase.from("game_results").select("game_id,member_id,rank,final_score,raw_score,chip").in("game_id", games.map(g => g.id));
       if (resultsRes.error) { if (active) { setError("スコアを取得できませんでした"); setLoading(false); } return; }
       const gameById = new Map(games.map(g => [g.id, g]));
       const matchById = new Map(matches.map(m => [m.id, m]));
@@ -99,7 +99,7 @@ export default function StatsPage() {
         const g = gameById.get(r.game_id);
         const m = g && matchById.get(g.match_id);
         if (!g || !m || !validIds.has(r.member_id)) return [];
-        return [{ memberId: r.member_id, matchId: g.match_id, gameId: g.id, date: m.match_date, gameNumber: g.game_number, rank: r.rank, score: Number(r.final_score) || 0, scoreMoney: (Number(r.final_score) || 0) * rateToYen(m.rate), chipMoney: (Number(r.chip) || 0) * tipToYen(m.tip) }];
+        return [{ memberId: r.member_id, matchId: g.match_id, gameId: g.id, date: m.match_date, gameNumber: g.game_number, rank: r.rank, score: Number(r.final_score) || 0, rawScore: r.raw_score == null ? null : Number(r.raw_score), scoreMoney: (Number(r.final_score) || 0) * rateToYen(m.rate), chipMoney: (Number(r.chip) || 0) * tipToYen(m.tip) }];
       });
       rows.sort((a, b) => a.date.localeCompare(b.date) || a.matchId - b.matchId || a.gameNumber - b.gameNumber || a.gameId - b.gameId);
       if (active) { setEntries(rows); setLoading(false); }
@@ -120,11 +120,10 @@ export default function StatsPage() {
     const total = list.reduce((sum, e) => sum + e.score, 0);
     const totalScoreMoney = list.reduce((sum, e) => sum + e.scoreMoney + e.chipMoney, 0);
     const counts = [1,2,3,4].map(rank => list.filter(e => e.rank === rank).length);
-    return { ...member, total, totalScoreMoney, games: list.length, average: list.length ? total / list.length : 0, averageRank: list.length ? list.reduce((s,e)=>s+e.rank,0)/list.length : 0, counts, max: list.length ? Math.max(...list.map(e=>e.score)) : 0, min: list.length ? Math.min(...list.map(e=>e.score)) : 0 };
+    return { ...member, total, totalScoreMoney, games: list.length, average: list.length ? total / list.length : 0, averageRank: list.length ? list.reduce((s,e)=>s+e.rank,0)/list.length : 0, counts, max: list.length ? Math.max(...list.map(e=>e.score)) : 0, min: list.length ? Math.min(...list.map(e=>e.score)) : 0, maxRaw: list.some(e=>e.rawScore !== null) ? Math.max(...list.filter(e=>e.rawScore !== null).map(e=>e.rawScore as number)) : null, minRaw: list.some(e=>e.rawScore !== null) ? Math.min(...list.filter(e=>e.rawScore !== null).map(e=>e.rawScore as number)) : null };
   }), [members, filtered]);
   const ranked = useMemo(() => [...stats].sort((a,b) => b.total-a.total || b.games-a.games || a.id-b.id), [stats]);
   const current = stats.find(m => m.id === selectedId);
-  const memberEntries = filtered.filter(e => e.memberId === selectedId);
   const trend = useMemo(() => {
     const list = filtered.filter(e => e.memberId === selectedId);
     const grouped: { key: string; label: string; score: number }[] = [];
@@ -161,12 +160,21 @@ export default function StatsPage() {
             { label: "平均スコア / 半荘", value: current.games ? signed(current.average,1) : "—", color: scoreColor(current.average) },
             { label: "半荘数", value: `${current.games}半荘`, color: "text-gray-900" },
             { label: "平均順位", value: current.games ? `${current.averageRank.toFixed(2)}位` : "—", color: "text-gray-900" },
-            { label: "1位率", value: current.games ? `${(current.counts[0]/current.games*100).toFixed(1)}%` : "—", color: "text-gray-900" },
-            { label: "4位率", value: current.games ? `${(current.counts[3]/current.games*100).toFixed(1)}%` : "—", color: "text-gray-900" },
             { label: "ラス回避率", value: current.games ? `${((current.games-current.counts[3])/current.games).toFixed(3)}` : "—", color: "text-green-700" },
-            { label: "最高スコア / 半荘", value: current.games ? signed(current.max) : "—", color: scoreColor(current.max) },
-            { label: "最低スコア / 半荘", value: current.games ? signed(current.min) : "—", color: scoreColor(current.min) },
           ].map(s=><div key={s.label} className="rounded-xl bg-white p-4 shadow-sm"><p className="text-xs text-gray-500">{s.label}</p><p className={`mt-2 break-all text-2xl font-bold ${s.color}`}>{s.value}</p></div>)}</div>
+          <div className="grid grid-cols-2 gap-3">
+            {[
+              { label: "最高記録", score: current.max, raw: current.maxRaw, color: scoreColor(current.max) },
+              { label: "最低記録", score: current.min, raw: current.minRaw, color: scoreColor(current.min) },
+            ].map(record => <div key={record.label} className="min-w-0 rounded-xl bg-white p-4 shadow-sm">
+              <h2 className="mb-3 text-sm font-bold text-gray-800">{record.label}</h2>
+              <p className="text-xs text-gray-500">スコア</p>
+              <p className={`mt-1 break-all text-xl font-bold ${record.color}`}>{current.games ? signed(record.score) : "—"}</p>
+              <p className="mt-3 text-xs text-gray-500">素点</p>
+              <p className="mt-1 break-all text-lg font-bold text-gray-900">{record.raw === null ? "—" : `${record.raw.toLocaleString("ja-JP")}点`}</p>
+            </div>)}
+          </div>
+          <p className="text-xs text-gray-500">※ スコアと素点の最高・最低は、それぞれ独立して集計しています。</p>
           <p className="text-xs text-gray-500">※ 対戦ごとのレート・チップ単価で計算。場代・追加支出は含みません。</p>
           <div className="rounded-xl bg-white p-4 shadow-sm"><h2 className="mb-4 font-bold">順位分布</h2>{current.counts.map((count,i)=><div key={i} className="mb-3 flex items-center gap-3"><span className="w-8 text-sm">{i+1}位</span><div className="h-3 flex-1 overflow-hidden rounded-full bg-purple-100"><div className="h-full rounded-full bg-purple-600" style={{width:`${current.games ? count/current.games*100 : 0}%`}} /></div><span className="w-20 text-right text-xs text-gray-600">{count}回 ({current.games ? (count/current.games*100).toFixed(0) : 0}%)</span></div>)}</div>
           <button className="w-full rounded-xl bg-purple-700 p-3 font-bold text-white" onClick={()=>setTab("trend")}>このメンバーのスコア推移を見る ›</button>
