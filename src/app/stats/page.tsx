@@ -163,6 +163,7 @@ export default function StatsPage() {
             { label: "平均順位", value: current.games ? `${current.averageRank.toFixed(2)}位` : "—", color: "text-gray-900" },
             { label: "1位率", value: current.games ? `${(current.counts[0]/current.games*100).toFixed(1)}%` : "—", color: "text-gray-900" },
             { label: "4位率", value: current.games ? `${(current.counts[3]/current.games*100).toFixed(1)}%` : "—", color: "text-gray-900" },
+            { label: "ラス回避率", value: current.games ? `${((current.games-current.counts[3])/current.games).toFixed(3)}` : "—", color: "text-green-700" },
             { label: "最高スコア / 半荘", value: current.games ? signed(current.max) : "—", color: scoreColor(current.max) },
             { label: "最低スコア / 半荘", value: current.games ? signed(current.min) : "—", color: scoreColor(current.min) },
           ].map(s=><div key={s.label} className="rounded-xl bg-white p-4 shadow-sm"><p className="text-xs text-gray-500">{s.label}</p><p className={`mt-2 break-all text-2xl font-bold ${s.color}`}>{s.value}</p></div>)}</div>
