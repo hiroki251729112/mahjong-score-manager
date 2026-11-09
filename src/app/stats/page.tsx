@@ -6,10 +6,10 @@ import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 
 type Member = { id: number; name: string };
-type Match = { id: number; match_date: string };
+type Match = { id: number; match_date: string; rate: string | null; tip: string | null };
 type Game = { id: number; match_id: number; game_number: number };
-type Result = { game_id: number; member_id: number; rank: number; final_score: number };
-type Entry = { memberId: number; matchId: number; gameId: number; date: string; gameNumber: number; rank: number; score: number };
+type Result = { game_id: number; member_id: number; rank: number; final_score: number; chip: number | null };
+type Entry = { memberId: number; matchId: number; gameId: number; date: string; gameNumber: number; rank: number; score: number; scoreMoney: number; chipMoney: number };
 type Tab = "ranking" | "member" | "trend";
 type Period = "all" | "year" | "30days";
 type Unit = "game" | "match";
@@ -17,6 +17,23 @@ type Unit = "game" | "match";
 const signed = (n: number, digits = 0) => `${n > 0 ? "+" : ""}${n.toFixed(digits)}`;
 const scoreColor = (n: number) => n > 0 ? "text-green-600" : n < 0 ? "text-red-600" : "text-gray-500";
 const dateLabel = (d: string) => d.replace(/-/g, "/").slice(5, 10);
+// Keep the conversion consistent with the existing match settlement screen.
+const rateToYen = (rate: string | null) => {
+  const presets: Record<string, number> = {
+    "なし": 0, "テンイチ": 10, "テンニ": 20, "テンサン": 30,
+    "テンヨン": 40, "テンゴ": 50, "テンピン": 100,
+  };
+  if (rate == null) return 0;
+  if (Object.prototype.hasOwnProperty.call(presets, rate)) return presets[rate];
+  const custom = Number(rate);
+  return Number.isFinite(custom) && custom >= 0 ? custom : 0;
+};
+const tipToYen = (tip: string | null) => {
+  if (!tip || tip === "なし") return 0;
+  const amount = Number(tip);
+  return Number.isFinite(amount) && amount >= 0 ? amount : 0;
+};
+const yen = (n: number) => `${n > 0 ? "+" : n < 0 ? "-" : ""}${Math.abs(n).toLocaleString("ja-JP")}円`;
 
 function LineGraph({ values, labels }: { values: number[]; labels: string[] }) {
   if (!values.length) return <p className="py-12 text-center text-sm text-gray-500">この期間の成績がありません</p>;
@@ -60,7 +77,7 @@ export default function StatsPage() {
       const userId = auth.user.id;
       const [membersRes, matchesRes] = await Promise.all([
         supabase.from("members").select("id,name").eq("user_id", userId).order("id"),
-        supabase.from("matches").select("id,match_date").eq("user_id", userId).order("match_date", { ascending: true }).order("id", { ascending: true }),
+        supabase.from("matches").select("id,match_date,rate,tip").eq("user_id", userId).order("match_date", { ascending: true }).order("id", { ascending: true }),
       ]);
       if (membersRes.error || matchesRes.error) { if (active) { setError("メンバーまたは対戦データを取得できませんでした"); setLoading(false); } return; }
       const memberRows = (membersRes.data ?? []) as Member[];
@@ -73,7 +90,7 @@ export default function StatsPage() {
       if (gamesRes.error) { if (active) { setError("半荘データを取得できませんでした"); setLoading(false); } return; }
       const games = (gamesRes.data ?? []) as Game[];
       if (!games.length) { if (active) setLoading(false); return; }
-      const resultsRes = await supabase.from("game_results").select("game_id,member_id,rank,final_score").in("game_id", games.map(g => g.id));
+      const resultsRes = await supabase.from("game_results").select("game_id,member_id,rank,final_score,chip").in("game_id", games.map(g => g.id));
       if (resultsRes.error) { if (active) { setError("スコアを取得できませんでした"); setLoading(false); } return; }
       const gameById = new Map(games.map(g => [g.id, g]));
       const matchById = new Map(matches.map(m => [m.id, m]));
@@ -82,7 +99,7 @@ export default function StatsPage() {
         const g = gameById.get(r.game_id);
         const m = g && matchById.get(g.match_id);
         if (!g || !m || !validIds.has(r.member_id)) return [];
-        return [{ memberId: r.member_id, matchId: g.match_id, gameId: g.id, date: m.match_date, gameNumber: g.game_number, rank: r.rank, score: Number(r.final_score) || 0 }];
+        return [{ memberId: r.member_id, matchId: g.match_id, gameId: g.id, date: m.match_date, gameNumber: g.game_number, rank: r.rank, score: Number(r.final_score) || 0, scoreMoney: (Number(r.final_score) || 0) * rateToYen(m.rate), chipMoney: (Number(r.chip) || 0) * tipToYen(m.tip) }];
       });
       rows.sort((a, b) => a.date.localeCompare(b.date) || a.matchId - b.matchId || a.gameNumber - b.gameNumber || a.gameId - b.gameId);
       if (active) { setEntries(rows); setLoading(false); }
@@ -101,8 +118,9 @@ export default function StatsPage() {
   const stats = useMemo(() => members.map(member => {
     const list = filtered.filter(e => e.memberId === member.id);
     const total = list.reduce((sum, e) => sum + e.score, 0);
+    const totalScoreMoney = list.reduce((sum, e) => sum + e.scoreMoney + e.chipMoney, 0);
     const counts = [1,2,3,4].map(rank => list.filter(e => e.rank === rank).length);
-    return { ...member, total, games: list.length, average: list.length ? total / list.length : 0, averageRank: list.length ? list.reduce((s,e)=>s+e.rank,0)/list.length : 0, counts, max: list.length ? Math.max(...list.map(e=>e.score)) : 0, min: list.length ? Math.min(...list.map(e=>e.score)) : 0 };
+    return { ...member, total, totalScoreMoney, games: list.length, average: list.length ? total / list.length : 0, averageRank: list.length ? list.reduce((s,e)=>s+e.rank,0)/list.length : 0, counts, max: list.length ? Math.max(...list.map(e=>e.score)) : 0, min: list.length ? Math.min(...list.map(e=>e.score)) : 0 };
   }), [members, filtered]);
   const ranked = useMemo(() => [...stats].sort((a,b) => b.total-a.total || b.games-a.games || a.id-b.id), [stats]);
   const current = stats.find(m => m.id === selectedId);
@@ -139,6 +157,7 @@ export default function StatsPage() {
         {tab === "member" && current && <section className="space-y-4">
           <div className="grid grid-cols-2 gap-3">{[
             { label: "通算スコア", value: signed(current.total), color: scoreColor(current.total) },
+            { label: "スコア・チップ収支", value: yen(current.totalScoreMoney), color: scoreColor(current.totalScoreMoney) },
             { label: "平均スコア / 半荘", value: current.games ? signed(current.average,1) : "—", color: scoreColor(current.average) },
             { label: "半荘数", value: `${current.games}半荘`, color: "text-gray-900" },
             { label: "平均順位", value: current.games ? `${current.averageRank.toFixed(2)}位` : "—", color: "text-gray-900" },
@@ -147,6 +166,7 @@ export default function StatsPage() {
             { label: "最高スコア / 半荘", value: current.games ? signed(current.max) : "—", color: scoreColor(current.max) },
             { label: "最低スコア / 半荘", value: current.games ? signed(current.min) : "—", color: scoreColor(current.min) },
           ].map(s=><div key={s.label} className="rounded-xl bg-white p-4 shadow-sm"><p className="text-xs text-gray-500">{s.label}</p><p className={`mt-2 break-all text-2xl font-bold ${s.color}`}>{s.value}</p></div>)}</div>
+          <p className="text-xs text-gray-500">※ 対戦ごとのレート・チップ単価で計算。場代・追加支出は含みません。</p>
           <div className="rounded-xl bg-white p-4 shadow-sm"><h2 className="mb-4 font-bold">順位分布</h2>{current.counts.map((count,i)=><div key={i} className="mb-3 flex items-center gap-3"><span className="w-8 text-sm">{i+1}位</span><div className="h-3 flex-1 overflow-hidden rounded-full bg-purple-100"><div className="h-full rounded-full bg-purple-600" style={{width:`${current.games ? count/current.games*100 : 0}%`}} /></div><span className="w-20 text-right text-xs text-gray-600">{count}回 ({current.games ? (count/current.games*100).toFixed(0) : 0}%)</span></div>)}</div>
           <button className="w-full rounded-xl bg-purple-700 p-3 font-bold text-white" onClick={()=>setTab("trend")}>このメンバーのスコア推移を見る ›</button>
         </section>}
