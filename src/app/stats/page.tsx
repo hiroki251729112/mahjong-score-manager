@@ -70,14 +70,23 @@ function Distribution({ scores }: { scores: number[] }) {
   ];
   const counts = bins.map(b => scores.filter(b.test).length);
   const max = Math.max(1, ...counts);
+  const chartHeight = 160;
   return <div className="rounded-xl bg-white p-4 shadow-sm">
     <h2 className="font-bold">スコア分布</h2>
-    <p className="mt-1 mb-4 text-xs text-gray-500">半荘の最終スコアを範囲別に集計（{scores.length}半荘）</p>
-    {scores.length === 0 ? <p className="py-6 text-center text-sm text-gray-500">この期間の成績がありません</p> : bins.map((b, i) => <div key={b.label} className="mb-3 flex items-center gap-2">
-      <span className="w-20 shrink-0 text-xs text-gray-600">{b.label}</span>
-      <div className="h-5 min-w-0 flex-1 overflow-hidden rounded bg-purple-100"><div className="h-full rounded bg-purple-600" style={{ width: `${counts[i] / max * 100}%` }}/></div>
-      <span className="w-16 shrink-0 text-right text-xs tabular-nums text-gray-600">{counts[i]}回 ({(counts[i] / scores.length * 100).toFixed(0)}%)</span>
-    </div>)}
+    <p className="mt-1 mb-4 text-xs text-gray-500">半荘の最終スコアを範囲別に集計（{scores.length}半荘）。棒が高いほど、そのスコア帯の半荘が多いことを示します。</p>
+    {scores.length === 0 ? <p className="py-6 text-center text-sm text-gray-500">この期間の成績がありません</p> : <div>
+      <div className="flex items-end gap-1">
+        <div className="flex w-7 shrink-0 flex-col justify-between text-right text-[10px] text-gray-500" style={{height:chartHeight}}><span>{max}回</span><span>{Math.round(max/2)}</span><span>0</span></div>
+        <div className="flex min-w-0 flex-1 items-end gap-1 border-b border-gray-300" style={{height:chartHeight}}>
+          {bins.map((b,i)=><div key={b.label} className="flex h-full min-w-0 flex-1 flex-col items-center justify-end">
+            <span className="mb-1 text-[10px] font-semibold tabular-nums text-purple-800">{counts[i]}</span>
+            <div className="w-full max-w-12 rounded-t bg-purple-600" style={{height:`${counts[i] / max * (chartHeight - 22)}px`}} />
+          </div>)}
+        </div>
+      </div>
+      <div className="mt-2 flex gap-1"><div className="w-7 shrink-0" />{bins.map(b=><span key={b.label} className="min-w-0 flex-1 text-center text-[9px] leading-tight text-gray-600 break-words">{b.label}</span>)}</div>
+      <p className="mt-3 text-center text-xs text-gray-500">縦軸：半荘数　横軸：最終スコア帯</p>
+    </div>}
   </div>;
 }
 
@@ -246,7 +255,7 @@ export default function StatsPage() {
         </section>}
         {tab === "trend" && <section className="space-y-4"><div className="rounded-xl bg-white p-4 shadow-sm"><div className="mb-4 flex rounded-lg bg-purple-100 p-1"><button onClick={()=>setUnit("game")} className={`flex-1 rounded-md py-2 text-sm font-bold ${unit === "game" ? "bg-purple-700 text-white" : "text-purple-800"}`}>半荘ごと</button><button onClick={()=>setUnit("match")} className={`flex-1 rounded-md py-2 text-sm font-bold ${unit === "match" ? "bg-purple-700 text-white" : "text-purple-800"}`}>対戦ごと</button></div><h2 className="mb-1 font-bold">累計スコアの推移</h2><p className="mb-2 text-xs text-gray-500">{unit === "game" ? "1半荘ごと" : "1回の対戦ごと"}に合計して表示 · {trend.count}件</p><LineGraph values={trend.values} labels={trend.labels}/><p className="mt-2 text-center text-xs text-gray-500">横軸：{unit === "game" ? "半荘の順番" : "対戦日"}　縦軸：累計スコア</p></div><div className="rounded-xl bg-white p-4 shadow-sm">
           <h2 className="font-bold">移動平均スコア</h2>
-          <p className="mt-1 mb-3 text-xs text-gray-500">直近の半荘スコアの平均。期間内の記録だけで計算します。</p>
+          <p className="mt-1 mb-3 text-xs text-gray-500">直近の5半荘または10半荘の平均スコアを、1半荘進むごとに計算したグラフです。上向きなら最近の成績が改善傾向、下向きなら低下傾向にあることが分かります。短期的な大勝ち・大負けの影響をならして調子を確認できます。期間内の記録だけで計算します。</p>
           <div className="mb-3 flex rounded-lg bg-purple-100 p-1">{([5,10] as const).map(n=><button key={n} onClick={()=>setAverageWindow(n)} className={`flex-1 rounded-md py-2 text-sm font-bold ${averageWindow===n?'bg-purple-700 text-white':'text-purple-800'}`}>直近{n}半荘</button>)}</div>
           <MovingAverageGraph scores={selectedGames.map(e=>e.score)} windowSize={averageWindow}/>
           <p className="mt-2 text-center text-xs text-gray-500">縦軸：平均スコア　横軸：半荘の順番</p>
