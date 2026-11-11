@@ -58,6 +58,47 @@ function LineGraph({ values, labels }: { values: number[]; labels: string[] }) {
   </div>;
 }
 
+
+function Distribution({ scores }: { scores: number[] }) {
+  const bins = [
+    { label: "-60未満", test: (n: number) => n < -60 },
+    { label: "-60〜-30", test: (n: number) => n >= -60 && n < -30 },
+    { label: "-30〜0", test: (n: number) => n >= -30 && n < 0 },
+    { label: "0〜+30", test: (n: number) => n >= 0 && n < 30 },
+    { label: "+30〜+60", test: (n: number) => n >= 30 && n < 60 },
+    { label: "+60以上", test: (n: number) => n >= 60 },
+  ];
+  const counts = bins.map(b => scores.filter(b.test).length);
+  const max = Math.max(1, ...counts);
+  return <div className="rounded-xl bg-white p-4 shadow-sm">
+    <h2 className="font-bold">スコア分布</h2>
+    <p className="mt-1 mb-4 text-xs text-gray-500">半荘の最終スコアを範囲別に集計（{scores.length}半荘）</p>
+    {scores.length === 0 ? <p className="py-6 text-center text-sm text-gray-500">この期間の成績がありません</p> : bins.map((b, i) => <div key={b.label} className="mb-3 flex items-center gap-2">
+      <span className="w-20 shrink-0 text-xs text-gray-600">{b.label}</span>
+      <div className="h-5 min-w-0 flex-1 overflow-hidden rounded bg-purple-100"><div className="h-full rounded bg-purple-600" style={{ width: `${counts[i] / max * 100}%` }}/></div>
+      <span className="w-16 shrink-0 text-right text-xs tabular-nums text-gray-600">{counts[i]}回 ({(counts[i] / scores.length * 100).toFixed(0)}%)</span>
+    </div>)}
+  </div>;
+}
+
+function MovingAverageGraph({ scores, windowSize }: { scores: number[]; windowSize: number }) {
+  const averages = scores.map((_, i) => i + 1 < windowSize ? null : scores.slice(i + 1 - windowSize, i + 1).reduce((a,b) => a+b, 0) / windowSize);
+  const valid = averages.filter((v): v is number => v !== null);
+  if (!valid.length) return <p className="py-8 text-center text-sm text-gray-500">移動平均には{windowSize}半荘以上の記録が必要です（現在{scores.length}半荘）</p>;
+  const width = 340, height = 200, left = 43, right = 12, top = 18, bottom = 30;
+  const lo = Math.min(0, ...valid), hi = Math.max(0, ...valid);
+  const pad = Math.max(5, (hi - lo) * 0.12), min = lo-pad, max = hi+pad;
+  const x = (i: number) => left + (valid.length === 1 ? (width-left-right)/2 : i/(valid.length-1)*(width-left-right));
+  const y = (v: number) => top + (max-v)/(max-min)*(height-top-bottom);
+  const path = valid.map((v,i)=>`${i===0?'M':'L'}${x(i).toFixed(2)},${y(v).toFixed(2)}`).join(' ');
+  return <svg viewBox={`0 0 ${width} ${height}`} className="w-full" role="img" aria-label={`${windowSize}半荘移動平均グラフ`}>
+    {[min,0,max].map((v,i)=><g key={i}><line x1={left} x2={width-right} y1={y(v)} y2={y(v)} stroke={v===0?'#a78bfa':'#e5e7eb'} strokeDasharray={v===0?'4 4':undefined}/><text x={left-5} y={y(v)+4} textAnchor="end" fontSize="10" fill="#6b7280">{v.toFixed(0)}</text></g>)}
+    <path d={path} stroke="#7e22ce" strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" fill="none"/>
+    <text x={left} y={height-8} fontSize="10" fill="#6b7280">{windowSize}半荘目</text>
+    <text x={width-right} y={height-8} textAnchor="end" fontSize="10" fill="#6b7280">{scores.length}半荘目</text>
+  </svg>;
+}
+
 export default function StatsPage() {
   const router = useRouter();
   const [members, setMembers] = useState<Member[]>([]);
@@ -66,6 +107,7 @@ export default function StatsPage() {
   const [period, setPeriod] = useState<Period>("all");
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [unit, setUnit] = useState<Unit>("game");
+  const [averageWindow, setAverageWindow] = useState<5 | 10>(5);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -137,6 +179,19 @@ export default function StatsPage() {
     return { values: grouped.map(g => cumulative += g.score), labels: grouped.map(g => g.label), count: grouped.length };
   }, [filtered, selectedId, unit]);
 
+  const selectedGames = useMemo(() => filtered.filter(e => e.memberId === selectedId), [filtered, selectedId]);
+  const affinities = useMemo(() => {
+    const byGame = new Map<number, Entry[]>();
+    for (const e of filtered) {
+      const group = byGame.get(e.gameId) ?? [];
+      group.push(e);
+      byGame.set(e.gameId, group);
+    }
+    return members.filter(m => m.id !== selectedId).map(m => {
+      const together = selectedGames.filter(e => byGame.get(e.gameId)?.some(other => other.memberId === m.id));
+      return { ...m, count: together.length, avgRank: together.length ? together.reduce((a,e)=>a+e.rank,0)/together.length : 0, avgScore: together.length ? together.reduce((a,e)=>a+e.score,0)/together.length : 0 };
+    }).filter(m=>m.count>0).sort((a,b)=>b.count-a.count || a.name.localeCompare(b.name,'ja'));
+  }, [filtered, members, selectedGames, selectedId]);
   const tabs: { id: Tab; label: string }[] = [{ id: "ranking", label: "ランキング" }, { id: "member", label: "メンバー別" }, { id: "trend", label: "スコア推移" }];
   return <main className="min-h-screen bg-gray-100 px-4 py-5 text-gray-900">
     <div className="mx-auto max-w-2xl">
@@ -177,9 +232,25 @@ export default function StatsPage() {
           <p className="text-xs text-gray-500">※ スコアと素点の最高・最低は、それぞれ独立して集計しています。</p>
           <p className="text-xs text-gray-500">※ 対戦ごとのレート・チップ単価で計算。場代・追加支出は含みません。</p>
           <div className="rounded-xl bg-white p-4 shadow-sm"><h2 className="mb-4 font-bold">順位分布</h2>{current.counts.map((count,i)=><div key={i} className="mb-3 flex items-center gap-3"><span className="w-8 text-sm">{i+1}位</span><div className="h-3 flex-1 overflow-hidden rounded-full bg-purple-100"><div className="h-full rounded-full bg-purple-600" style={{width:`${current.games ? count/current.games*100 : 0}%`}} /></div><span className="w-20 text-right text-xs text-gray-600">{count}回 ({current.games ? (count/current.games*100).toFixed(0) : 0}%)</span></div>)}</div>
+          <Distribution scores={selectedGames.map(e => e.score)} />
+          <div className="rounded-xl bg-white p-4 shadow-sm">
+            <h2 className="font-bold">同卓相手との相性</h2>
+            <p className="mt-1 mb-3 text-xs text-gray-500">その相手と同じ半荘に参加したときの自分の成績。相手との直接対決の勝率ではありません。</p>
+            {affinities.length === 0 ? <p className="py-6 text-center text-sm text-gray-500">この期間に同卓記録がありません</p> : <div className="space-y-2">{affinities.map(a=><div key={a.id} className="rounded-lg border border-purple-100 p-3">
+              <div className="flex flex-wrap items-center justify-between gap-1"><span className="break-words font-bold">{a.name}</span><span className="text-xs text-gray-500">同卓 {a.count}半荘</span></div>
+              <div className="mt-2 grid grid-cols-2 gap-2 text-sm"><div>平均順位 <strong>{a.avgRank.toFixed(2)}位</strong></div><div>平均スコア <strong className={scoreColor(a.avgScore)}>{signed(a.avgScore,1)}</strong></div></div>
+              {a.count < 5 && <p className="mt-1 text-xs text-amber-700">※ 5半荘未満のため参考値</p>}
+            </div>)}</div>}
+          </div>
           <button className="w-full rounded-xl bg-purple-700 p-3 font-bold text-white" onClick={()=>setTab("trend")}>このメンバーのスコア推移を見る ›</button>
         </section>}
-        {tab === "trend" && <section className="space-y-4"><div className="rounded-xl bg-white p-4 shadow-sm"><div className="mb-4 flex rounded-lg bg-purple-100 p-1"><button onClick={()=>setUnit("game")} className={`flex-1 rounded-md py-2 text-sm font-bold ${unit === "game" ? "bg-purple-700 text-white" : "text-purple-800"}`}>半荘ごと</button><button onClick={()=>setUnit("match")} className={`flex-1 rounded-md py-2 text-sm font-bold ${unit === "match" ? "bg-purple-700 text-white" : "text-purple-800"}`}>対戦ごと</button></div><h2 className="mb-1 font-bold">累計スコアの推移</h2><p className="mb-2 text-xs text-gray-500">{unit === "game" ? "1半荘ごと" : "1回の対戦ごと"}に合計して表示 · {trend.count}件</p><LineGraph values={trend.values} labels={trend.labels}/><p className="mt-2 text-center text-xs text-gray-500">横軸：{unit === "game" ? "半荘の順番" : "対戦日"}　縦軸：累計スコア</p></div><div className="rounded-xl bg-white p-4 shadow-sm"><p className="text-sm text-gray-500">現在の累計スコア</p><p className={`mt-1 text-3xl font-bold ${scoreColor(current?.total ?? 0)}`}>{signed(current?.total ?? 0)}</p></div></section>}
+        {tab === "trend" && <section className="space-y-4"><div className="rounded-xl bg-white p-4 shadow-sm"><div className="mb-4 flex rounded-lg bg-purple-100 p-1"><button onClick={()=>setUnit("game")} className={`flex-1 rounded-md py-2 text-sm font-bold ${unit === "game" ? "bg-purple-700 text-white" : "text-purple-800"}`}>半荘ごと</button><button onClick={()=>setUnit("match")} className={`flex-1 rounded-md py-2 text-sm font-bold ${unit === "match" ? "bg-purple-700 text-white" : "text-purple-800"}`}>対戦ごと</button></div><h2 className="mb-1 font-bold">累計スコアの推移</h2><p className="mb-2 text-xs text-gray-500">{unit === "game" ? "1半荘ごと" : "1回の対戦ごと"}に合計して表示 · {trend.count}件</p><LineGraph values={trend.values} labels={trend.labels}/><p className="mt-2 text-center text-xs text-gray-500">横軸：{unit === "game" ? "半荘の順番" : "対戦日"}　縦軸：累計スコア</p></div><div className="rounded-xl bg-white p-4 shadow-sm">
+          <h2 className="font-bold">移動平均スコア</h2>
+          <p className="mt-1 mb-3 text-xs text-gray-500">直近の半荘スコアの平均。期間内の記録だけで計算します。</p>
+          <div className="mb-3 flex rounded-lg bg-purple-100 p-1">{([5,10] as const).map(n=><button key={n} onClick={()=>setAverageWindow(n)} className={`flex-1 rounded-md py-2 text-sm font-bold ${averageWindow===n?'bg-purple-700 text-white':'text-purple-800'}`}>直近{n}半荘</button>)}</div>
+          <MovingAverageGraph scores={selectedGames.map(e=>e.score)} windowSize={averageWindow}/>
+          <p className="mt-2 text-center text-xs text-gray-500">縦軸：平均スコア　横軸：半荘の順番</p>
+        </div><div className="rounded-xl bg-white p-4 shadow-sm"><p className="text-sm text-gray-500">現在の累計スコア</p><p className={`mt-1 text-3xl font-bold ${scoreColor(current?.total ?? 0)}`}>{signed(current?.total ?? 0)}</p></div></section>}
         {members.length === 0 && tab !== "ranking" && <p className="text-center text-gray-500">メンバーが登録されていません</p>}
       </>}
     </div>
