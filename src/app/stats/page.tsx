@@ -59,8 +59,19 @@ function LineGraph({ values, labels }: { values: number[]; labels: string[] }) {
 }
 
 
-function Distribution({ scores }: { scores: number[] }) {
-  const bins = [
+function Distribution({ scores, rawScores }: { scores: number[]; rawScores: number[] }) {
+  const [mode, setMode] = useState<"score" | "raw">("score");
+  const isRaw = mode === "raw";
+  const values = isRaw ? rawScores : scores;
+  const bins = isRaw ? [
+    { label: "0未満", test: (n: number) => n < 0 },
+    { label: "0〜1万", test: (n: number) => n >= 0 && n < 10000 },
+    { label: "1〜2万", test: (n: number) => n >= 10000 && n < 20000 },
+    { label: "2〜3万", test: (n: number) => n >= 20000 && n < 30000 },
+    { label: "3〜4万", test: (n: number) => n >= 30000 && n < 40000 },
+    { label: "4〜5万", test: (n: number) => n >= 40000 && n < 50000 },
+    { label: "5万以上", test: (n: number) => n >= 50000 },
+  ] : [
     { label: "-60未満", test: (n: number) => n < -60 },
     { label: "-60〜-30", test: (n: number) => n >= -60 && n < -30 },
     { label: "-30〜0", test: (n: number) => n >= -30 && n < 0 },
@@ -68,13 +79,17 @@ function Distribution({ scores }: { scores: number[] }) {
     { label: "+30〜+60", test: (n: number) => n >= 30 && n < 60 },
     { label: "+60以上", test: (n: number) => n >= 60 },
   ];
-  const counts = bins.map(b => scores.filter(b.test).length);
+  const counts = bins.map(b => values.filter(b.test).length);
   const max = Math.max(1, ...counts);
   const chartHeight = 160;
   return <div className="rounded-xl bg-white p-4 shadow-sm">
     <h2 className="font-bold">スコア分布</h2>
-    <p className="mt-1 mb-4 text-xs text-gray-500">半荘の最終スコアを範囲別に集計（{scores.length}半荘）。棒が高いほど、そのスコア帯の半荘が多いことを示します。</p>
-    {scores.length === 0 ? <p className="py-6 text-center text-sm text-gray-500">この期間の成績がありません</p> : <div>
+    <div className="mt-3 mb-3 flex rounded-lg bg-purple-100 p-1">
+      <button type="button" onClick={() => setMode("score")} className={`flex-1 rounded-md py-2 text-sm font-bold ${!isRaw ? "bg-purple-700 text-white" : "text-purple-800"}`}>スコア</button>
+      <button type="button" onClick={() => setMode("raw")} className={`flex-1 rounded-md py-2 text-sm font-bold ${isRaw ? "bg-purple-700 text-white" : "text-purple-800"}`}>素点</button>
+    </div>
+    <p className="mb-4 text-xs text-gray-500">{isRaw ? "半荘終了時の素点（点数）" : "半荘の最終スコア"}を範囲別に集計（{values.length}半荘）。棒が高いほど、その範囲の半荘が多いことを示します。</p>
+    {values.length === 0 ? <p className="py-6 text-center text-sm text-gray-500">{isRaw ? "この期間に素点の記録がありません" : "この期間の成績がありません"}</p> : <div>
       <div className="flex items-end gap-1">
         <div className="flex w-7 shrink-0 flex-col justify-between text-right text-[10px] text-gray-500" style={{height:chartHeight}}><span>{max}回</span><span>{Math.round(max/2)}</span><span>0</span></div>
         <div className="flex min-w-0 flex-1 items-end gap-1 border-b border-gray-300" style={{height:chartHeight}}>
@@ -85,7 +100,8 @@ function Distribution({ scores }: { scores: number[] }) {
         </div>
       </div>
       <div className="mt-2 flex gap-1"><div className="w-7 shrink-0" />{bins.map(b=><span key={b.label} className="min-w-0 flex-1 text-center text-[9px] leading-tight text-gray-600 break-words">{b.label}</span>)}</div>
-      <p className="mt-3 text-center text-xs text-gray-500">縦軸：半荘数　横軸：最終スコア帯</p>
+      <p className="mt-3 text-center text-xs text-gray-500">縦軸：半荘数　横軸：{isRaw ? "素点帯" : "最終スコア帯"}</p>
+      {isRaw && rawScores.length < scores.length && <p className="mt-1 text-center text-xs text-amber-700">素点未登録の{scores.length - rawScores.length}半荘は集計対象外です。</p>}
     </div>}
   </div>;
 }
@@ -241,7 +257,7 @@ export default function StatsPage() {
           <p className="text-xs text-gray-500">※ スコアと素点の最高・最低は、それぞれ独立して集計しています。</p>
           <p className="text-xs text-gray-500">※ 対戦ごとのレート・チップ単価で計算。場代・追加支出は含みません。</p>
           <div className="rounded-xl bg-white p-4 shadow-sm"><h2 className="mb-4 font-bold">順位分布</h2>{current.counts.map((count,i)=><div key={i} className="mb-3 flex items-center gap-3"><span className="w-8 text-sm">{i+1}位</span><div className="h-3 flex-1 overflow-hidden rounded-full bg-purple-100"><div className="h-full rounded-full bg-purple-600" style={{width:`${current.games ? count/current.games*100 : 0}%`}} /></div><span className="w-20 text-right text-xs text-gray-600">{count}回 ({current.games ? (count/current.games*100).toFixed(0) : 0}%)</span></div>)}</div>
-          <Distribution scores={selectedGames.map(e => e.score)} />
+          <Distribution scores={selectedGames.map(e => e.score)} rawScores={selectedGames.filter(e => e.rawScore !== null).map(e => e.rawScore as number)} />
           <div className="rounded-xl bg-white p-4 shadow-sm">
             <h2 className="font-bold">同卓相手との相性</h2>
             <p className="mt-1 mb-3 text-xs text-gray-500">その相手と同じ半荘に参加したときの自分の成績。相手との直接対決の勝率ではありません。</p>
